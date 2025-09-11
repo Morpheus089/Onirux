@@ -9,7 +9,6 @@ const __dirname = path.dirname(__filename);
 
 const isDev = process.env.NODE_ENV === 'development';
 
-// Pool MariaDB
 const pool = mariadb.createPool({
   host: 'echoesofavalone.falixsrv.me',
   port: 23003,
