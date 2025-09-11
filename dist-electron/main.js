@@ -1,14 +1,14 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import mariadb from 'mariadb';
-import bcrypt from 'bcrypt';
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-// Détection mode développement
-const isDev = process.env.NODE_ENV === 'development';
-// Pool MariaDB
-const pool = mariadb.createPool({
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const electron_1 = require("electron");
+const path_1 = __importDefault(require("path"));
+const mariadb_1 = __importDefault(require("mariadb"));
+const bcrypt_1 = __importDefault(require("bcrypt"));
+const isDev = !electron_1.app.isPackaged;
+const pool = mariadb_1.default.createPool({
     host: 'echoesofavalone.falixsrv.me',
     port: 23003,
     user: 'u2234829_f0VCVth5WE',
@@ -16,55 +16,115 @@ const pool = mariadb.createPool({
     database: 's2234829_Onirux',
     connectionLimit: 5
 });
-// Crée la fenêtre principale
+async function ensureUsersTable(conn) {
+    await conn.query(`CREATE TABLE IF NOT EXISTS users (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      username VARCHAR(50) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL
+    )`);
+}
+async function initDb() {
+    let conn;
+    try {
+        conn = await pool.getConnection();
+        console.log('init: connected');
+        await ensureUsersTable(conn);
+        if (isDev) {
+            const hash = '$2b$10$BiLq2WUcDUbKR7MbV93lsOp8.7uxce6sxKq8dlI/crhJaZwQ0spsi';
+            await conn.query('INSERT INTO users (username, password_hash) VALUES (?, ?) ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash)', ['test', hash]);
+            console.log('init: table ensured and test user upserted (dev only)');
+        }
+    }
+    catch (e) {
+        console.error('init error', e);
+    }
+    finally {
+        if (conn)
+            conn.release();
+    }
+}
+function applyProdCSP() {
+    if (isDev)
+        return;
+    const csp = [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self'",
+        "img-src 'self' data:",
+        "font-src 'self'",
+        "connect-src 'self'",
+        "media-src 'self'",
+        "object-src 'none'",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+    ].join('; ');
+    electron_1.session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+        callback({
+            responseHeaders: {
+                ...details.responseHeaders,
+                'Content-Security-Policy': [csp],
+            },
+        });
+    });
+}
 function createWindow() {
-    const win = new BrowserWindow({
+    const win = new electron_1.BrowserWindow({
         width: 1024,
         height: 768,
         autoHideMenuBar: true,
         webPreferences: {
-            nodeIntegration: true, // Permet d'utiliser Node.js dans le renderer
-            contextIsolation: false, // Nécessaire pour ipcRenderer
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path_1.default.join(__dirname, 'preload.js'),
         },
     });
     win.setMenuBarVisibility(false);
     if (isDev) {
-        // En dev : charge Vite (React) sur le port 5173
         win.loadURL('http://localhost:5173');
         win.webContents.openDevTools();
     }
     else {
-        // En prod : charge le build React compilé dans dist/
-        win.loadFile(path.join(__dirname, '../dist/index.html'));
+        win.loadFile(path_1.default.join(__dirname, '../dist/index.html'));
     }
 }
-// Événements Electron
-app.whenReady().then(() => {
+electron_1.app.whenReady().then(async () => {
+    console.log('app ready');
+    applyProdCSP();
+    await initDb();
     createWindow();
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0)
+    electron_1.app.on('activate', () => {
+        if (electron_1.BrowserWindow.getAllWindows().length === 0)
             createWindow();
     });
 });
-app.on('window-all-closed', () => {
+electron_1.app.on('window-all-closed', () => {
     if (process.platform !== 'darwin')
-        app.quit();
+        electron_1.app.quit();
 });
-// Communication Renderer ↔ Main : vérification login
-ipcMain.handle('check-login', async (event, { username, password }) => {
+electron_1.ipcMain.handle('check-login', async (event, { username, password }) => {
+    console.log('check-login received', { username });
     let conn;
     try {
         conn = await pool.getConnection();
+        console.log('db connected');
+        // Ensure table exists on demand
+        await ensureUsersTable(conn);
         const rows = await conn.query('SELECT password_hash FROM users WHERE username = ? LIMIT 1', [username]);
-        if (!rows[0])
+        if (!rows[0]) {
+            console.log('user not found');
             return { success: false };
-        const match = await bcrypt.compare(password, rows[0].password_hash);
-        if (!match)
+        }
+        const match = await bcrypt_1.default.compare(password, rows[0].password_hash);
+        if (!match) {
+            console.log('bad password');
             return { success: false };
+        }
+        console.log('login ok');
         return { success: true };
     }
     catch (err) {
-        console.error('Erreur login:', err);
+        console.error('login error', err);
         return { success: false };
     }
     finally {
