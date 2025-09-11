@@ -1,0 +1,73 @@
+.rain-container {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+  z-index: 0;
+  background-color: #000;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%);
+}
+
+.rain-column {
+  display: flex;
+  flex-direction: column;
+  margin: 0 2px;
+  line-height: 1.1;
+  backface-visibility: hidden;
+  will-change: transform;
+  animation-name: fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+}
+
+.rain-char {
+  font-size: 20px;
+  font-family: ui-monospace, Menlo, Monaco, Consolas, "Courier New", monospace;
+  opacity: 0.9;
+  text-shadow:
+    0 0 6px rgba(0, 255, 120, 0.6),
+    0 0 12px rgba(0, 255, 120, 0.35);
+  animation: flicker 3s infinite;
+  will-change: opacity;
+}
+
+.rain-char:nth-child(4n+1) { color: hsl(130, 100%, 64%); }
+.rain-char:nth-child(4n+2) { color: hsl(135, 100%, 58%); }
+.rain-char:nth-child(4n+3) { color: hsl(145, 100%, 52%); }
+.rain-char:nth-child(4n+4) { color: hsl(155, 100%, 46%); }
+
+.rain-column .rain-char:first-child {
+  color: hsl(110, 100%, 78%);
+  text-shadow:
+    0 0 8px rgba(180, 255, 200, 0.9),
+    0 0 16px rgba(120, 255, 160, 0.7),
+    0 0 28px rgba(80, 255, 140, 0.55);
+  filter: brightness(1.2) saturate(1.2);
+  opacity: 1;
+}
+
+@keyframes fall {
+  0%   { transform: translateY(-110%); }
+  100% { transform: translateY(110%); }
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 0.9; }
+  25%       { opacity: 0.8; }
+  50%       { opacity: 1; }
+  75%       { opacity: 0.85; }
+}
+
+.rain-char:nth-child(2n) { animation-delay: 0.1s; }
+.rain-char:nth-child(3n) { animation-delay: 0.2s; }
+.rain-char:nth-child(5n) { animation-delay: 0.3s; }
+.rain-char:nth-child(7n) { animation-delay: 0.4s; }
+
+@media (min-width: 1400px) { .rain-char { font-size: 22px; } }
+@media (max-width:  900px) { .rain-char { font-size: 18px; } }
+@media (max-width:  600px) { .rain-char { font-size: 16px; } }

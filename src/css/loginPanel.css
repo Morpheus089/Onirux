@@ -1,0 +1,45 @@
+.login-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.6);
+  padding: 20px 25px;
+  border-radius: 10px;
+  color: white;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  backdrop-filter: blur(6px);
+  animation: float 4s ease-in-out infinite;
+}
+
+.login-panel input {
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  outline: none;
+  font-size: 16px;
+  font-family: 'Noto Sans JP', sans-serif;
+}
+
+.login-panel button {
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-weight: bold;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.login-panel button:hover {
+  transform: scale(1.05);
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(-50%, -50%) translateY(0); }
+  50% { transform: translate(-50%, -50%) translateY(-8px); }
+}
