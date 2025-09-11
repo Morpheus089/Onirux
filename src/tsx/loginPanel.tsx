@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { ipcRenderer } from 'electron';
 import '../css/loginPanel.css';
 
 const LoginPanel: React.FC = () => {
@@ -10,15 +9,19 @@ const LoginPanel: React.FC = () => {
   const handleLogin = async () => {
     setError(null);
     try {
-      const result = await ipcRenderer.invoke('check-login', { username, password });
+      console.log('handleLogin', { username });
+      const result = await window.electronAPI.checkLogin(username, password);
 
       if (!result.success) {
+        console.log('login fail');
         setError('Identifiants incorrects');
         setPassword('');
       } else {
+        console.log('login success');
         alert('Connexion réussie !');
       }
     } catch (err: any) {
+      console.error('handleLogin error', err);
       setError(`Erreur lors de la connexion : ${err.message}`);
     }
   };

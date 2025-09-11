@@ -1,12 +1,12 @@
 {
   "name": "onirux",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "concurrently \"vite\" \"tsc -w --project electron/tsconfig.json\" \"wait-on http://localhost:5173 && electron .\"",
-    "build": "vite build && tsc --project electron/tsconfig.json",
+    "dev": "concurrently \"vite\" \"tsc -w --project electron/tsconfig.json\" \"tsc -w --project electron/tsconfig.preload.json\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "vite build && tsc --project electron/tsconfig.json && tsc --project electron/tsconfig.preload.json",
     "start": "electron .",
     "lint": "eslint ."
   },
