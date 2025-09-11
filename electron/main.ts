@@ -1,16 +1,10 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, session } from 'electron';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import mariadb from 'mariadb';
 import bcrypt from 'bcrypt';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const isDev = !app.isPackaged;
 
-// Détection mode développement
-const isDev = process.env.NODE_ENV === 'development';
-
-// Pool MariaDB
 const pool = mariadb.createPool({
   host: 'echoesofavalone.falixsrv.me',
   port: 23003,
@@ -20,32 +14,88 @@ const pool = mariadb.createPool({
   connectionLimit: 5
 });
 
-// Crée la fenêtre principale
+async function ensureUsersTable(conn: any) {
+  await conn.query(
+    `CREATE TABLE IF NOT EXISTS users (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      username VARCHAR(50) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL
+    )`
+  );
+}
+
+async function initDb() {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    console.log('init: connected');
+    await ensureUsersTable(conn);
+    if (isDev) {
+      const hash = '$2b$10$BiLq2WUcDUbKR7MbV93lsOp8.7uxce6sxKq8dlI/crhJaZwQ0spsi';
+      await conn.query(
+        'INSERT INTO users (username, password_hash) VALUES (?, ?) ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash)',
+        ['test', hash]
+      );
+      console.log('init: table ensured and test user upserted (dev only)');
+    }
+  } catch (e) {
+    console.error('init error', e);
+  } finally {
+    if (conn) conn.release();
+  }
+}
+
+function applyProdCSP() {
+  if (isDev) return;
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "media-src 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join('; ');
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [csp],
+      },
+    });
+  });
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1024,
     height: 768,
     autoHideMenuBar: true,
     webPreferences: {
-      nodeIntegration: true,      // Permet d'utiliser Node.js dans le renderer
-      contextIsolation: false,    // Nécessaire pour ipcRenderer
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
   win.setMenuBarVisibility(false);
 
   if (isDev) {
-    // En dev : charge Vite (React) sur le port 5173
     win.loadURL('http://localhost:5173');
     win.webContents.openDevTools();
   } else {
-    // En prod : charge le build React compilé dans dist/
     win.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 }
 
-// Événements Electron
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  console.log('app ready');
+  applyProdCSP();
+  await initDb();
   createWindow();
 
   app.on('activate', () => {
@@ -57,24 +107,35 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// Communication Renderer ↔ Main : vérification login
 ipcMain.handle('check-login', async (event, { username, password }) => {
+  console.log('check-login received', { username });
   let conn;
   try {
     conn = await pool.getConnection();
+    console.log('db connected');
+    // Ensure table exists on demand
+    await ensureUsersTable(conn);
+
     const rows = await conn.query(
       'SELECT password_hash FROM users WHERE username = ? LIMIT 1',
       [username]
     );
 
-    if (!rows[0]) return { success: false };
+    if (!rows[0]) {
+      console.log('user not found');
+      return { success: false };
+    }
 
     const match = await bcrypt.compare(password, rows[0].password_hash);
-    if (!match) return { success: false };
+    if (!match) {
+      console.log('bad password');
+      return { success: false };
+    }
 
+    console.log('login ok');
     return { success: true };
   } catch (err) {
-    console.error('Erreur login:', err);
+    console.error('login error', err);
     return { success: false };
   } finally {
     if (conn) conn.release();
