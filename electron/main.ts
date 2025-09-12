@@ -113,7 +113,6 @@ ipcMain.handle('check-login', async (event, { username, password }) => {
   try {
     conn = await pool.getConnection();
     console.log('db connected');
-    // Ensure table exists on demand
     await ensureUsersTable(conn);
 
     const rows = await conn.query(
