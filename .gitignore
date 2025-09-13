@@ -9,10 +9,12 @@ lerna-debug.log*
 
 node_modules
 dist
-dist-electron/main.jso
-dist-electron/preload.js
 dist-ssr
 *.local
+
+!dist-electron/
+dist-electron/main.js
+dist-electron/preload.js
 
 # Editor directories and files
 .vscode/*

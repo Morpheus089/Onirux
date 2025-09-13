@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import '../css/loginPanel.css';
 
-const LoginPanel: React.FC = () => {
+interface LoginPanelProps {
+  onLoginSuccess: () => void;
+}
+
+const LoginPanel: React.FC<LoginPanelProps> = ({ onLoginSuccess }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -18,11 +22,17 @@ const LoginPanel: React.FC = () => {
         setPassword('');
       } else {
         console.log('login success');
-        alert('Connexion réussie !');
+        onLoginSuccess();
       }
     } catch (err: any) {
       console.error('handleLogin error', err);
       setError(`Erreur lors de la connexion : ${err.message}`);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleLogin();
     }
   };
 
@@ -33,12 +43,14 @@ const LoginPanel: React.FC = () => {
         placeholder="ユーザー名"
         value={username}
         onChange={e => setUsername(e.target.value)}
+        onKeyPress={handleKeyPress}
       />
       <input
         type="password"
         placeholder="パスワード"
         value={password}
         onChange={e => setPassword(e.target.value)}
+        onKeyPress={handleKeyPress}
       />
       <button onClick={handleLogin}>接続</button>
 

@@ -1,9 +1,14 @@
-import { app, BrowserWindow, ipcMain, session } from 'electron';
+import { app, BrowserWindow, ipcMain, session, Tray, Menu, nativeImage } from 'electron';
 import path from 'path';
 import mariadb from 'mariadb';
 import bcrypt from 'bcrypt';
+import { existsSync } from 'fs';
 
 const isDev = !app.isPackaged;
+let mainWindow: BrowserWindow | null = null;
+let hiddenWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let isQuitting = false;
 
 const pool = mariadb.createPool({
   host: 'echoesofavalone.falixsrv.me',
@@ -30,14 +35,6 @@ async function initDb() {
     conn = await pool.getConnection();
     console.log('init: connected');
     await ensureUsersTable(conn);
-    if (isDev) {
-      const hash = '$2b$10$BiLq2WUcDUbKR7MbV93lsOp8.7uxce6sxKq8dlI/crhJaZwQ0spsi';
-      await conn.query(
-        'INSERT INTO users (username, password_hash) VALUES (?, ?) ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash)',
-        ['test', hash]
-      );
-      console.log('init: table ensured and test user upserted (dev only)');
-    }
   } catch (e) {
     console.error('init error', e);
   } finally {
@@ -45,12 +42,95 @@ async function initDb() {
   }
 }
 
+function createHiddenWindow() {
+  hiddenWindow = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  if (isDev) {
+    hiddenWindow.loadURL('http://localhost:5173');
+  } else {
+    hiddenWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
+
+  hiddenWindow.on('closed', () => {
+    if (!isQuitting) {
+      createHiddenWindow();
+    }
+  });
+}
+
+function createTray() {
+  try {
+    let trayIcon;
+    const iconPath = isDev 
+      ? path.join(__dirname, '../src/assets/logo.ico')
+      : path.join(process.resourcesPath, 'assets', 'logo.ico');
+    
+    if (existsSync(iconPath)) {
+      trayIcon = nativeImage.createFromPath(iconPath);
+    } else {
+      trayIcon = nativeImage.createEmpty();
+    }
+    
+    tray = new Tray(trayIcon);
+    
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: 'Ouvrir Onirux',
+        click: () => {
+          showWindow();
+        }
+      },
+      {
+        type: 'separator'
+      },
+      {
+        label: 'Quitter',
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        }
+      }
+    ]);
+    
+    tray.setContextMenu(contextMenu);
+    tray.setToolTip('Onirux - Animation en cours');
+    
+    tray.on('click', () => {
+      showWindow();
+    });
+    
+    tray.on('double-click', () => {
+      showWindow();
+    });
+  } catch (error) {
+    console.log('Tray non disponible, continuons sans...');
+  }
+}
+
+function showWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+  } else {
+    createWindow();
+  }
+}
+
 function applyProdCSP() {
   if (isDev) return;
   const csp = [
     "default-src 'self'",
-    "script-src 'self'",
-    "style-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     "font-src 'self'",
     "connect-src 'self'",
@@ -71,7 +151,7 @@ function applyProdCSP() {
 }
 
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1024,
     height: 768,
     autoHideMenuBar: true,
@@ -79,32 +159,70 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
+      backgroundThrottling: false,
     },
   });
 
-  win.setMenuBarVisibility(false);
+  mainWindow.setMenuBarVisibility(false);
 
   if (isDev) {
-    win.loadURL('http://localhost:5173');
-    win.webContents.openDevTools();
+    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.webContents.openDevTools();
   } else {
-    win.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+
+  mainWindow.webContents.on('dom-ready', () => {
+    mainWindow?.webContents.executeJavaScript(`
+      document.addEventListener('visibilitychange', function() {
+        console.log('Visibility changed:', document.visibilityState);
+      });
+    `);
+  });
+
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow?.hide();
+      console.log('Fenêtre cachée - Animation continue en arrière-plan');
+      return false;
+    }
+  });
+
+  mainWindow.on('minimize', () => {
+    if (!isQuitting) {
+      mainWindow?.hide();
+    }
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 }
 
-app.whenReady().then(async () => {
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+
+app.on('ready', async () => {
   console.log('app ready');
+  
   applyProdCSP();
   await initDb();
+  createHiddenWindow();
+  createTray();
   createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  return;
+});
+
+app.on('activate', () => {
+  showWindow();
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
 });
 
 ipcMain.handle('check-login', async (event, { username, password }) => {
