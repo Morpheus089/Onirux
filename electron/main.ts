@@ -19,22 +19,12 @@ const pool = mariadb.createPool({
   connectionLimit: 5
 });
 
-async function ensureUsersTable(conn: any) {
-  await conn.query(
-    `CREATE TABLE IF NOT EXISTS users (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      username VARCHAR(50) NOT NULL UNIQUE,
-      password_hash VARCHAR(255) NOT NULL
-    )`
-  );
-}
-
 async function initDb() {
   let conn;
   try {
     conn = await pool.getConnection();
     console.log('init: connected');
-    await ensureUsersTable(conn);
+    // plus aucune création de table ici
   } catch (e) {
     console.error('init error', e);
   } finally {
@@ -86,9 +76,7 @@ function createTray() {
           showWindow();
         }
       },
-      {
-        type: 'separator'
-      },
+      { type: 'separator' },
       {
         label: 'Quitter',
         click: () => {
@@ -101,13 +89,8 @@ function createTray() {
     tray.setContextMenu(contextMenu);
     tray.setToolTip('Onirux - Animation en cours');
     
-    tray.on('click', () => {
-      showWindow();
-    });
-    
-    tray.on('double-click', () => {
-      showWindow();
-    });
+    tray.on('click', () => showWindow());
+    tray.on('double-click', () => showWindow());
   } catch (error) {
     console.log('Tray non disponible, continuons sans...');
   }
@@ -115,9 +98,7 @@ function createTray() {
 
 function showWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore();
-    }
+    if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
     mainWindow.focus();
   } else {
@@ -140,12 +121,10 @@ function applyProdCSP() {
     "base-uri 'self'",
     "form-action 'self'",
   ].join('; ');
+
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [csp],
-      },
+      responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp] },
     });
   });
 }
@@ -190,14 +169,10 @@ function createWindow() {
   });
 
   mainWindow.on('minimize', () => {
-    if (!isQuitting) {
-      mainWindow?.hide();
-    }
+    if (!isQuitting) mainWindow?.hide();
   });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+  mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 app.commandLine.appendSwitch('disable-background-timer-throttling');
@@ -205,7 +180,6 @@ app.commandLine.appendSwitch('disable-renderer-backgrounding');
 
 app.on('ready', async () => {
   console.log('app ready');
-  
   applyProdCSP();
   await initDb();
   createHiddenWindow();
@@ -213,17 +187,9 @@ app.on('ready', async () => {
   createWindow();
 });
 
-app.on('window-all-closed', () => {
-  return;
-});
-
-app.on('activate', () => {
-  showWindow();
-});
-
-app.on('before-quit', () => {
-  isQuitting = true;
-});
+app.on('window-all-closed', () => { return; });
+app.on('activate', () => { showWindow(); });
+app.on('before-quit', () => { isQuitting = true; });
 
 ipcMain.handle('check-login', async (event, { username, password }) => {
   console.log('check-login received', { username });
@@ -231,7 +197,6 @@ ipcMain.handle('check-login', async (event, { username, password }) => {
   try {
     conn = await pool.getConnection();
     console.log('db connected');
-    await ensureUsersTable(conn);
 
     const rows = await conn.query(
       'SELECT password_hash FROM users WHERE username = ? LIMIT 1',

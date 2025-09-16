@@ -1,5 +1,3 @@
-// create_user.js
-
 import mariadb from 'mariadb';
 import bcrypt   from 'bcrypt';
 
@@ -27,13 +25,13 @@ async function main() {
     `);
     console.log('Table users prête.');
 
-    const plainPassword = 'Morpheus_Khan';
+    const plainPassword = 'Jeyzho';
     const saltRounds    = 10;
     const hash          = await bcrypt.hash(plainPassword, saltRounds);
 
     const res = await conn.query(
       'INSERT INTO users (username, password_hash) VALUES (?, ?)',
-      ['Morpheus', hash]
+      ['Jeyzho', hash]
     );
     console.log(`Utilisateur créé avec l’ID : ${res.insertId}`);
   }
